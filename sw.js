@@ -1,5 +1,5 @@
 // 수정해서 다시 올릴 때는 아래 버전 숫자만 올려 주세요.
-const CACHE = 'move-checklist-v1';
+const CACHE = 'move-checklist-v2';
 const FILES = ['./', './index.html', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

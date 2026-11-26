@@ -82,6 +82,8 @@
   dialog textarea { min-height: 120px; font-size: 13px; font-family: ui-monospace, Menlo, monospace; }
   .row { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
   .row .btn { flex: 1; }
+  .sync { font-size: 14px; color: var(--sub); margin: -6px 2px 10px; min-height: 1px; }
+  .sync.ok { color: var(--ok); } .sync.badcode { color: var(--danger); }
   .move { --c: var(--move); } .tesla { --c: var(--tesla); }
 </style>
 </head>
@@ -91,6 +93,7 @@
   <button class="icon-btn" id="openSettings" aria-label="설정">⚙︎</button>
 </header>
 
+<div class="sync" id="sync"></div>
 <div class="ddays">
   <div class="dday move"><div class="label">이사</div><div class="num" id="dd-move"></div><div class="date" id="dt-move"></div></div>
   <div class="dday tesla"><div class="label">테슬라 탁송</div><div class="num" id="dd-tesla"></div><div class="date" id="dt-tesla"></div></div>
@@ -118,6 +121,17 @@
     <label for="sMove">이사 날짜</label><input type="date" id="sMove">
     <label for="sTesla">테슬라 탁송 날짜</label><input type="date" id="sTesla">
     <div class="row"><button class="btn" value="save" style="--c:var(--move)">날짜 저장</button></div>
+    <label style="margin-top:22px">가족 공유</label>
+    <div id="shareOn">
+      <div class="row" style="margin-top:4px">
+        <button class="btn" type="button" id="bLink" style="--c:var(--ok)">가족에게 링크 보내기</button>
+        <button class="btn ghost" type="button" id="bUnshare">공유 끄기</button>
+      </div>
+    </div>
+    <div id="shareOff">
+      <input type="text" id="codeIn" placeholder="공유 코드 또는 공유 링크 붙여넣기" autocapitalize="off" autocomplete="off" spellcheck="false">
+      <div class="row" style="margin-top:8px"><button class="btn" type="button" id="bCode" style="--c:var(--ok)">가족 공유 연결</button></div>
+    </div>
     <label style="margin-top:22px">백업 · 복원</label>
     <div class="row" style="margin-top:4px">
       <button class="btn ghost" type="button" id="bExport">백업 복사</button>
@@ -168,6 +182,83 @@
   function valid(s) { return s && s.dates && Array.isArray(s.tasks); }
   let state = load();
   const uid = () => 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+  // ---------- 가족 공유(구글 시트 동기화) ----------
+  // 공유 코드가 있으면 구글 시트와 동기화, 없으면 이 폰에만 저장
+  const API = 'https://script.google.com/macros/s/AKfycbymYs-FmpQVXRGMjL4sBETIOF7qEWonkb32J7Xz9G21px-sxiP_cS9H2mQd5BjQNff7qg/exec';
+  const CODE_KEY = 'move-checklist-code', PEND_KEY = 'move-checklist-pending';
+  function getCode() { try { return localStorage.getItem(CODE_KEY) || ''; } catch (e) { return ''; } }
+  function setCode(c) { try { c ? localStorage.setItem(CODE_KEY, c) : localStorage.removeItem(CODE_KEY); } catch (e) {} }
+  (function pickCodeFromLink() {   // 링크 끝의 #k=공유코드 를 읽어 저장
+    const m = location.hash.match(/k=([\w-]+)/);
+    if (m) { setCode(m[1]); history.replaceState(null, '', location.pathname + location.search); }
+  })();
+  let pending = (() => { try { return JSON.parse(localStorage.getItem(PEND_KEY) || '[]'); } catch (e) { return []; } })();
+  function savePending() { try { localStorage.setItem(PEND_KEY, JSON.stringify(pending)); } catch (e) {} }
+  let syncStatus = 'local';   // local | ok | syncing | offline | badcode
+
+  function applyOp(s, o) {
+    if (o.op === 'upsert') {
+      const i = s.tasks.findIndex(t => t.id === o.task.id);
+      if (i >= 0) s.tasks[i] = Object.assign({}, o.task); else s.tasks.push(Object.assign({}, o.task));
+    } else if (o.op === 'delete') {
+      s.tasks = s.tasks.filter(t => t.id !== o.id);
+    } else if (o.op === 'dates') {
+      s.dates = Object.assign({}, s.dates, o.dates);
+    } else if (o.op === 'replace') {
+      s.tasks = JSON.parse(JSON.stringify(o.state.tasks)); s.dates = Object.assign({}, o.state.dates);
+    }
+  }
+  // 변경 사항: 이 폰에 먼저 반영하고, 공유 중이면 서버로 보냄
+  function commit(op) {
+    applyOp(state, op); save(state);
+    if (getCode()) { pending.push(op); savePending(); flush(); }
+    render();
+  }
+  function fromServer(srv) {
+    const s = { version: 1, dates: Object.assign({}, state.dates, srv.dates || {}), tasks: srv.tasks || [] };
+    pending.forEach(o => applyOp(s, o));       // 아직 못 보낸 변경은 다시 얹기
+    const changed = JSON.stringify(s) !== JSON.stringify(state);
+    state = s; save(state);
+    if (changed && !busyEditing()) render();
+  }
+  function busyEditing() {
+    const a = document.activeElement;
+    return document.querySelector('dialog[open]') || (a && /INPUT|TEXTAREA/.test(a.tagName) && a.value);
+  }
+  let inFlight = false;
+  async function flush() {
+    const code = getCode(); if (!code || inFlight) return;
+    inFlight = true; setStatus('syncing');
+    try {
+      let res;
+      if (pending.length) {
+        const sending = pending.slice();
+        const r = await fetch(API, { method: 'POST', body: JSON.stringify({ k: code, ops: sending }) });
+        res = await r.json();
+        if (res.ok) { pending = pending.slice(sending.length); savePending(); }
+      } else {
+        const r = await fetch(API + '?k=' + encodeURIComponent(code), { cache: 'no-store' });
+        res = await r.json();
+        // 처음 연결했는데 시트가 비어 있으면 이 폰의 목록을 올림
+        if (res.ok && !res.state.tasks.length && !Object.keys(res.state.dates || {}).length) {
+          pending.push({ op: 'replace', state: { tasks: state.tasks, dates: state.dates } }); savePending();
+          inFlight = false; return flush();
+        }
+      }
+      if (!res.ok) { setStatus(res.error === 'key' ? 'badcode' : 'offline'); }
+      else { fromServer(res.state); setStatus('ok'); }
+    } catch (e) { setStatus('offline'); }
+    inFlight = false;
+    if (pending.length && syncStatus === 'ok') flush();
+  }
+  function setStatus(s) {
+    syncStatus = s;
+    const el = document.getElementById('sync'); if (!el) return;
+    const map = { local: '', ok: '● 가족 공유 중', syncing: '◌ 동기화 중…', offline: '○ 오프라인 · 연결되면 자동 반영', badcode: '⚠ 공유 코드가 맞지 않아요' };
+    el.textContent = getCode() ? map[s] : '';
+    el.className = 'sync ' + s;
+  }
 
   // ---------- dates (기기 현지 날짜 = 한국시간 기준) ----------
   function dayNum(iso) { const [y, m, d] = iso.split('-').map(Number); return Date.UTC(y, m - 1, d) / 86400000; }
@@ -229,7 +320,7 @@
   groupsEl.addEventListener('change', e => {
     if (!e.target.classList.contains('chk')) return;
     const t = state.tasks.find(x => x.id === e.target.closest('li').dataset.id);
-    if (t) { t.done = e.target.checked; save(state); setTimeout(render, 180); }
+    if (t) { const nt = Object.assign({}, t, { done: e.target.checked }); setTimeout(() => commit({ op: 'upsert', task: nt }), 180); }
   });
   groupsEl.addEventListener('submit', e => {
     e.preventDefault();
@@ -237,8 +328,7 @@
     const text = f.querySelector('input[type=text]').value.trim();
     const due = f.querySelector('input[type=date]').value || null;
     if (!text) return;
-    state.tasks.push({ id: uid(), group, text, due, done: false });
-    save(state); render();
+    commit({ op: 'upsert', task: { id: uid(), group, text, due, done: false } });
   });
   let editing = null;
   const editDlg = document.getElementById('editDlg');
@@ -252,16 +342,15 @@
   editDlg.addEventListener('close', () => {
     if (editDlg.returnValue === 'save' && editing) {
       const v = document.getElementById('eText').value.trim();
-      if (v) editing.text = v;
-      editing.due = document.getElementById('eDue').value || null;
-      save(state); render();
+      const nt = Object.assign({}, editing, { text: v || editing.text, due: document.getElementById('eDue').value || null });
+      commit({ op: 'upsert', task: nt });
     }
     editing = null; editDlg.returnValue = '';
   });
   document.getElementById('eDel').addEventListener('click', () => {
     if (!editing) return;
     if (confirm('"' + editing.text + '"을(를) 삭제할까요?')) {
-      state.tasks = state.tasks.filter(x => x !== editing); save(state); editing = null; editDlg.close(); render();
+      const id = editing.id; editing = null; editDlg.close(); commit({ op: 'delete', id });
     }
   });
 
@@ -269,13 +358,13 @@
   document.getElementById('openSettings').addEventListener('click', () => {
     document.getElementById('sMove').value = state.dates.move;
     document.getElementById('sTesla').value = state.dates.tesla;
-    box.value = ''; setDlg.showModal();
+    box.value = ''; showShare(); setDlg.showModal();
   });
   setDlg.addEventListener('close', () => {
     if (setDlg.returnValue === 'save') {
       const m = document.getElementById('sMove').value, t = document.getElementById('sTesla').value;
-      if (m) state.dates.move = m; if (t) state.dates.tesla = t;
-      save(state); render();
+      const d = {}; if (m) d.move = m; if (t) d.tesla = t;
+      commit({ op: 'dates', dates: d });
     }
     setDlg.returnValue = '';
   });
@@ -289,15 +378,39 @@
       const s = JSON.parse(box.value.trim());
       if (!valid(s)) throw 0;
       if (!confirm('현재 내용을 백업 내용으로 바꿀까요?')) return;
-      state = s; save(state); render(); setDlg.close(); alertMsg('복원했어요.');
+      setDlg.close(); commit({ op: 'replace', state: { tasks: s.tasks, dates: s.dates } }); alertMsg('복원했어요.');
     } catch (e) { alertMsg('백업 내용이 올바르지 않아요.'); }
   });
   document.getElementById('bReset').addEventListener('click', () => {
     if (confirm('모든 할 일과 체크를 지우고 처음 상태로 되돌릴까요?')) {
-      state = DEFAULTS(); save(state); render(); setDlg.close();
+      const d = DEFAULTS(); setDlg.close(); commit({ op: 'replace', state: { tasks: d.tasks, dates: d.dates } });
     }
   });
   function alertMsg(m) { alert(m); }
+
+  // 가족 공유 설정
+  function shareLink() { return location.origin + location.pathname + '#k=' + getCode(); }
+  function showShare() {
+    const on = !!getCode();
+    document.getElementById('shareOn').style.display = on ? '' : 'none';
+    document.getElementById('shareOff').style.display = on ? 'none' : '';
+    document.getElementById('codeIn').value = '';
+  }
+  document.getElementById('bCode').addEventListener('click', () => {
+    const c = document.getElementById('codeIn').value.trim().replace(/^.*k=/, '');
+    if (!/^[\w-]{8,}$/.test(c)) { alertMsg('공유 코드를 확인해 주세요.'); return; }
+    if (!confirm('가족 공유에 연결할까요? 가족 목록이 이 폰에 표시됩니다.')) return;
+    setCode(c); showShare(); setDlg.close(); flush();
+  });
+  document.getElementById('bLink').addEventListener('click', async () => {
+    const link = shareLink();
+    if (navigator.share) { try { await navigator.share({ title: '이사·탁송 체크리스트', text: '가족 공유 체크리스트 링크예요', url: link }); return; } catch (e) { return; } }
+    try { await navigator.clipboard.writeText(link); alertMsg('링크를 복사했어요. 카톡으로 보내 주세요.'); }
+    catch (e) { box.value = link; box.select(); }
+  });
+  document.getElementById('bUnshare').addEventListener('click', () => {
+    if (confirm('이 폰에서 가족 공유를 끌까요? (목록은 이 폰에 남아요)')) { setCode(''); pending = []; savePending(); setStatus('local'); showShare(); }
+  });
 
   // 날짜가 바뀌면(자정, 앱 재진입) D-day 다시 계산
   let lastDay = todayNum();
@@ -305,6 +418,12 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshIfNewDay(); });
   setInterval(refreshIfNewDay, 60 * 1000);
   render();
+  setStatus(getCode() ? 'syncing' : 'local');
+  // 공유 중이면: 열 때, 다시 볼 때, 인터넷이 돌아올 때, 그리고 20초마다 새로 받아오기
+  flush();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) flush(); });
+  window.addEventListener('online', flush);
+  setInterval(() => { if (!document.hidden) flush(); }, 20 * 1000);
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
