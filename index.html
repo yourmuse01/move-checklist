@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>이사·탁송 체크리스트</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="이사체크">
+<meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111214" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --text: #16181c; --sub: #6b7280; --line: #e5e7eb;
+    --move: #2563eb; --tesla: #dc2626; --ok: #16a34a; --warn: #d97706; --danger: #dc2626;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111214; --card: #1c1e22; --text: #f3f4f6; --sub: #9ca3af; --line: #2d3036;
+      --move: #60a5fa; --tesla: #f87171; --ok: #4ade80; --warn: #fbbf24; --danger: #f87171; }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    font-size: 18px; line-height: 1.4;
+    padding: calc(env(safe-area-inset-top) + 12px) calc(env(safe-area-inset-right) + 14px)
+             calc(env(safe-area-inset-bottom) + 28px) calc(env(safe-area-inset-left) + 14px);
+    max-width: 640px; margin: 0 auto;
+  }
+  header { display: flex; justify-content: space-between; align-items: center; margin: 4px 2px 12px; }
+  h1 { font-size: 22px; margin: 0; }
+  .today { color: var(--sub); font-size: 15px; }
+  .icon-btn { border: 0; background: var(--card); color: var(--text); width: 44px; height: 44px;
+    border-radius: 12px; font-size: 22px; }
+  .ddays { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .dday { background: var(--card); border-radius: 16px; padding: 14px; border-top: 5px solid var(--c); }
+  .dday .label { font-size: 15px; color: var(--sub); }
+  .dday .num { font-size: 34px; font-weight: 800; color: var(--c); letter-spacing: -1px; }
+  .dday .date { font-size: 14px; color: var(--sub); }
+  section.group { background: var(--card); border-radius: 16px; padding: 14px 14px 8px; margin-bottom: 16px; }
+  .ghead { display: flex; justify-content: space-between; align-items: baseline; }
+  .ghead h2 { font-size: 20px; margin: 0; color: var(--c); }
+  .ghead .cnt { font-weight: 700; font-size: 17px; }
+  .bar { height: 8px; background: var(--line); border-radius: 4px; margin: 8px 0 6px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--c); width: 0; transition: width .3s; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); min-height: 56px; }
+  li:last-child { border-bottom: 0; }
+  .chk { appearance: none; -webkit-appearance: none; flex: 0 0 32px; width: 32px; height: 32px; margin: 0;
+    border: 2.5px solid var(--sub); border-radius: 9px; display: grid; place-items: center; }
+  .chk:checked { background: var(--c); border-color: var(--c); }
+  .chk:checked::after { content: "✓"; color: #fff; font-size: 21px; font-weight: 800; }
+  .body { flex: 1; min-width: 0; padding: 4px 0; }
+  .txt { word-break: keep-all; overflow-wrap: anywhere; }
+  .due { font-size: 14px; color: var(--sub); margin-top: 2px; }
+  .due.soon { color: var(--warn); font-weight: 600; }
+  .due.over { color: var(--danger); font-weight: 700; }
+  li.done .txt { text-decoration: line-through; color: var(--sub); }
+  li.done .due { display: none; }
+  .add { display: flex; gap: 8px; padding: 10px 0 6px; }
+  .add input[type=text] { flex: 1; min-width: 0; }
+  input, button.btn { font-size: 17px; font-family: inherit; }
+  input[type=text], input[type=date], textarea {
+    border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 10px; padding: 10px; min-height: 44px; }
+  input[type=date] { min-width: 0; }
+  .add input[type=date] { width: 132px; flex: 0 0 132px; }
+  button.btn { border: 0; border-radius: 10px; padding: 0 16px; min-height: 44px; background: var(--c, var(--move)); color: #fff; font-weight: 700; }
+  button.btn.ghost { background: var(--line); color: var(--text); }
+  button.btn.danger { background: var(--danger); }
+  .empty { color: var(--sub); padding: 12px 0; }
+  .hint { color: var(--sub); font-size: 14px; text-align: center; margin-top: 4px; }
+  dialog { border: 0; border-radius: 18px; background: var(--card); color: var(--text); width: min(92vw, 480px); padding: 18px; }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  dialog h3 { margin: 0 0 12px; }
+  dialog label { display: block; font-size: 15px; color: var(--sub); margin: 10px 0 4px; }
+  dialog input, dialog textarea { width: 100%; }
+  dialog textarea { min-height: 120px; font-size: 13px; font-family: ui-monospace, Menlo, monospace; }
+  .row { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .row .btn { flex: 1; }
+  .move { --c: var(--move); } .tesla { --c: var(--tesla); }
+</style>
+</head>
+<body>
+<header>
+  <div><h1>이사·탁송 체크리스트</h1><div class="today" id="today"></div></div>
+  <button class="icon-btn" id="openSettings" aria-label="설정">⚙︎</button>
+</header>
+
+<div class="ddays">
+  <div class="dday move"><div class="label">이사</div><div class="num" id="dd-move"></div><div class="date" id="dt-move"></div></div>
+  <div class="dday tesla"><div class="label">테슬라 탁송</div><div class="num" id="dd-tesla"></div><div class="date" id="dt-tesla"></div></div>
+</div>
+
+<div id="groups"></div>
+<p class="hint">할 일을 탭하면 수정·삭제할 수 있어요</p>
+
+<dialog id="editDlg">
+  <form method="dialog" id="editForm">
+    <h3>할 일 수정</h3>
+    <label for="eText">내용</label><input type="text" id="eText" required>
+    <label for="eDue">마감일 (비워 두면 마감 없음)</label><input type="date" id="eDue">
+    <div class="row">
+      <button class="btn danger" type="button" id="eDel">삭제</button>
+      <button class="btn ghost" value="cancel" formnovalidate>취소</button>
+      <button class="btn" value="save" id="eSave" style="--c:var(--move)">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="setDlg">
+  <form method="dialog" id="setForm">
+    <h3>설정</h3>
+    <label for="sMove">이사 날짜</label><input type="date" id="sMove">
+    <label for="sTesla">테슬라 탁송 날짜</label><input type="date" id="sTesla">
+    <div class="row"><button class="btn" value="save" style="--c:var(--move)">날짜 저장</button></div>
+    <label style="margin-top:22px">백업 · 복원</label>
+    <div class="row" style="margin-top:4px">
+      <button class="btn ghost" type="button" id="bExport">백업 복사</button>
+      <button class="btn ghost" type="button" id="bImport">붙여넣어 복원</button>
+    </div>
+    <textarea id="backupBox" placeholder="백업 복사를 누르면 여기에 내용이 나타나고 자동 복사됩니다. 복원하려면 저장해 둔 내용을 여기에 붙여넣고 '붙여넣어 복원'을 누르세요."></textarea>
+    <div class="row">
+      <button class="btn danger" type="button" id="bReset">처음 상태로 초기화</button>
+      <button class="btn ghost" value="cancel" formnovalidate>닫기</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(function () {
+  const KEY = 'move-checklist-v1';
+  const GROUPS = [
+    { id: 'move', name: '이사', dateKey: 'move' },
+    { id: 'tesla', name: '테슬라', dateKey: 'tesla' }
+  ];
+  const DEFAULTS = () => ({
+    version: 1,
+    dates: { move: '2026-12-05', tesla: '2026-12-07' },
+    tasks: [
+      ['move', '이사업체 최종 확인', '2026-12-01'],
+      ['move', '관리사무소 엘리베이터 예약', '2026-12-01'],
+      ['move', '인터넷 이전 신청', '2026-12-03'],
+      ['move', '도시가스 전출·전입', '2026-12-04'],
+      ['move', '짐 정리', '2026-12-04'],
+      ['move', '우편물 주소 변경', '2026-12-06'],
+      ['tesla', '보험 시작일 확인', '2026-12-02'],
+      ['tesla', '탁송지(틴팅·PPF 업체) 연락', '2026-12-03'],
+      ['tesla', '테슬라 앱 차량 등록 확인', '2026-12-05'],
+      ['tesla', '충전 방법 확인', '2026-12-06'],
+      ['tesla', '하이패스 등록', '2026-12-07']
+    ].map(([group, text, due], i) => ({ id: 't' + i + '-' + Date.now().toString(36), group, text, due, done: false }))
+  });
+
+  // ---------- storage ----------
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) { const s = JSON.parse(raw); if (valid(s)) return s; }
+    } catch (e) {}
+    const s = DEFAULTS(); save(s); return s;   // first run only
+  }
+  function save(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { alertMsg('저장에 실패했어요'); } }
+  function valid(s) { return s && s.dates && Array.isArray(s.tasks); }
+  let state = load();
+  const uid = () => 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+  // ---------- dates (기기 현지 날짜 = 한국시간 기준) ----------
+  function dayNum(iso) { const [y, m, d] = iso.split('-').map(Number); return Date.UTC(y, m - 1, d) / 86400000; }
+  function todayNum() { const n = new Date(); return Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()) / 86400000; }
+  function ddayLabel(iso) {
+    const diff = dayNum(iso) - todayNum();
+    return diff === 0 ? 'D-Day' : diff > 0 ? 'D-' + diff : 'D+' + (-diff);
+  }
+  const WD = ['일', '월', '화', '수', '목', '금', '토'];
+  function fmt(iso) { const [y, m, d] = iso.split('-').map(Number); const w = new Date(y, m - 1, d).getDay(); return m + '/' + d + ' (' + WD[w] + ')'; }
+
+  // ---------- render ----------
+  function sorted(list) {
+    return list.slice().sort((a, b) => {
+      if (a.done !== b.done) return a.done ? 1 : -1;
+      if (!!a.due !== !!b.due) return a.due ? -1 : 1;
+      if (a.due && b.due && a.due !== b.due) return a.due < b.due ? -1 : 1;
+      return 0;
+    });
+  }
+  function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+  function render() {
+    const n = new Date();
+    document.getElementById('today').textContent = '오늘 ' + (n.getMonth() + 1) + '/' + n.getDate() + ' (' + WD[n.getDay()] + ')';
+    for (const g of GROUPS) {
+      document.getElementById('dd-' + g.id).textContent = ddayLabel(state.dates[g.dateKey]);
+      document.getElementById('dt-' + g.id).textContent = fmt(state.dates[g.dateKey]);
+    }
+    const wrap = document.getElementById('groups');
+    wrap.innerHTML = GROUPS.map(g => {
+      const items = sorted(state.tasks.filter(t => t.group === g.id));
+      const done = items.filter(t => t.done).length;
+      const pct = items.length ? Math.round(done / items.length * 100) : 0;
+      const lis = items.map(t => {
+        let dueHtml = '';
+        if (t.due) {
+          const diff = dayNum(t.due) - todayNum();
+          const cls = diff < 0 ? 'over' : diff <= 2 ? 'soon' : '';
+          const rel = diff < 0 ? (-diff) + '일 지남' : diff === 0 ? '오늘까지' : diff + '일 남음';
+          dueHtml = '<div class="due ' + cls + '">마감 ' + fmt(t.due) + ' · ' + rel + '</div>';
+        }
+        return '<li class="' + (t.done ? 'done' : '') + '" data-id="' + t.id + '">' +
+          '<input type="checkbox" class="chk" aria-label="완료" ' + (t.done ? 'checked' : '') + '>' +
+          '<div class="body"><div class="txt">' + esc(t.text) + '</div>' + dueHtml + '</div></li>';
+      }).join('');
+      return '<section class="group ' + g.id + '" data-group="' + g.id + '">' +
+        '<div class="ghead"><h2>' + g.name + '</h2><span class="cnt">' + done + '/' + items.length + '</span></div>' +
+        '<div class="bar"><div style="width:' + pct + '%"></div></div>' +
+        '<ul>' + (lis || '<li class="empty">할 일이 없어요</li>') + '</ul>' +
+        '<form class="add"><input type="text" placeholder="할 일 추가" aria-label="할 일 내용" required>' +
+        '<input type="date" aria-label="마감일"><button class="btn" aria-label="추가">＋</button></form>' +
+        '</section>';
+    }).join('');
+  }
+
+  // ---------- events ----------
+  const groupsEl = document.getElementById('groups');
+  groupsEl.addEventListener('change', e => {
+    if (!e.target.classList.contains('chk')) return;
+    const t = state.tasks.find(x => x.id === e.target.closest('li').dataset.id);
+    if (t) { t.done = e.target.checked; save(state); setTimeout(render, 180); }
+  });
+  groupsEl.addEventListener('submit', e => {
+    e.preventDefault();
+    const f = e.target, group = f.closest('section').dataset.group;
+    const text = f.querySelector('input[type=text]').value.trim();
+    const due = f.querySelector('input[type=date]').value || null;
+    if (!text) return;
+    state.tasks.push({ id: uid(), group, text, due, done: false });
+    save(state); render();
+  });
+  let editing = null;
+  const editDlg = document.getElementById('editDlg');
+  groupsEl.addEventListener('click', e => {
+    const body = e.target.closest('.body'); if (!body) return;
+    editing = state.tasks.find(x => x.id === body.closest('li').dataset.id); if (!editing) return;
+    document.getElementById('eText').value = editing.text;
+    document.getElementById('eDue').value = editing.due || '';
+    editDlg.showModal();
+  });
+  editDlg.addEventListener('close', () => {
+    if (editDlg.returnValue === 'save' && editing) {
+      const v = document.getElementById('eText').value.trim();
+      if (v) editing.text = v;
+      editing.due = document.getElementById('eDue').value || null;
+      save(state); render();
+    }
+    editing = null; editDlg.returnValue = '';
+  });
+  document.getElementById('eDel').addEventListener('click', () => {
+    if (!editing) return;
+    if (confirm('"' + editing.text + '"을(를) 삭제할까요?')) {
+      state.tasks = state.tasks.filter(x => x !== editing); save(state); editing = null; editDlg.close(); render();
+    }
+  });
+
+  const setDlg = document.getElementById('setDlg'), box = document.getElementById('backupBox');
+  document.getElementById('openSettings').addEventListener('click', () => {
+    document.getElementById('sMove').value = state.dates.move;
+    document.getElementById('sTesla').value = state.dates.tesla;
+    box.value = ''; setDlg.showModal();
+  });
+  setDlg.addEventListener('close', () => {
+    if (setDlg.returnValue === 'save') {
+      const m = document.getElementById('sMove').value, t = document.getElementById('sTesla').value;
+      if (m) state.dates.move = m; if (t) state.dates.tesla = t;
+      save(state); render();
+    }
+    setDlg.returnValue = '';
+  });
+  document.getElementById('bExport').addEventListener('click', async () => {
+    box.value = JSON.stringify(state);
+    try { await navigator.clipboard.writeText(box.value); alertMsg('복사했어요. 메모 앱 등에 붙여넣어 보관하세요.'); }
+    catch (e) { box.select(); alertMsg('아래 내용을 길게 눌러 복사해 보관하세요.'); }
+  });
+  document.getElementById('bImport').addEventListener('click', () => {
+    try {
+      const s = JSON.parse(box.value.trim());
+      if (!valid(s)) throw 0;
+      if (!confirm('현재 내용을 백업 내용으로 바꿀까요?')) return;
+      state = s; save(state); render(); setDlg.close(); alertMsg('복원했어요.');
+    } catch (e) { alertMsg('백업 내용이 올바르지 않아요.'); }
+  });
+  document.getElementById('bReset').addEventListener('click', () => {
+    if (confirm('모든 할 일과 체크를 지우고 처음 상태로 되돌릴까요?')) {
+      state = DEFAULTS(); save(state); render(); setDlg.close();
+    }
+  });
+  function alertMsg(m) { alert(m); }
+
+  // 날짜가 바뀌면(자정, 앱 재진입) D-day 다시 계산
+  let lastDay = todayNum();
+  function refreshIfNewDay() { const d = todayNum(); if (d !== lastDay) { lastDay = d; render(); } }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshIfNewDay(); });
+  setInterval(refreshIfNewDay, 60 * 1000);
+  render();
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+})();
+</script>
+</body>
+</html>
